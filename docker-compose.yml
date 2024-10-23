@@ -1,0 +1,17 @@
+version: '3.8'
+services:
+  mongo:
+    image: mongo:latest
+    container_name: mongo
+    restart: always
+    ports:
+      - 27017:27017  # Exposes MongoDB on localhost:27017
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: kelompok5  # MongoDB root username
+      MONGO_INITDB_ROOT_PASSWORD: kelompok5  # MongoDB root password
+      MONGO_INITDB_DATABASE: mydatabase  # Initial database to create
+    volumes:
+      - mongo_volume:/data/db  # Persistent storage for MongoDB data
+
+volumes:
+  mongo_volume:
