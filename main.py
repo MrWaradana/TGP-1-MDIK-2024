@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pymongo.mongo_client import MongoClient
 from routes.route import router
 import uvicorn
+import uvloop
 
 
 app = FastAPI()
@@ -32,17 +33,17 @@ except Exception as e:
 
 app.include_router(router)
 
-if __name__ == "__main__":
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        workers=4,  # Number of worker processes
-        limit_concurrency=1000,  # Limit concurrent connections
-        limit_max_requests=50000,  # Limit max requests per worker
-        timeout_keep_alive=30,  # Keep-alive timeout
-        backlog=2048,  # Connection queue size
-        loop="uvloop",  # Use uvloop for better performance
-        proxy_headers=True,
-        forwarded_allow_ips="*",
-    )
+# if __name__ == "__main__":
+#     uvicorn.run(
+#         "main:app",
+#         host="0.0.0.0",
+#         port=8000,
+#         workers=4,  # Number of worker processes
+#         limit_concurrency=1000,  # Limit concurrent connections
+#         limit_max_requests=50000,  # Limit max requests per worker
+#         timeout_keep_alive=30,  # Keep-alive timeout
+#         backlog=2048,  # Connection queue size
+#         loop="uvloop",  # Use uvloop for better performance
+#         proxy_headers=True,
+#         forwarded_allow_ips="*",
+#     )

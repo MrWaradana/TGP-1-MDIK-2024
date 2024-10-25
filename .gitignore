@@ -1,7 +1,9 @@
+
 *.csv
 
 __pycache__
 
 /env
+/wslenv
 
 .yml
