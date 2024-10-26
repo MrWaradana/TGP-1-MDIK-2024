@@ -33,6 +33,8 @@ except Exception as e:
 
 app.include_router(router)
 
+# ? run command => gunicorn main:app -c gunicorn_conf.py
+
 # if __name__ == "__main__":
 #     uvicorn.run(
 #         "main:app",

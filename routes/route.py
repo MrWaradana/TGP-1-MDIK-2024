@@ -17,10 +17,10 @@ router = APIRouter()
 
 # Configure Redis connection pool
 redis_pool = BlockingConnectionPool(
-    host="redis-16912.c292.ap-southeast-1-1.ec2.redns.redis-cloud.com",
-    port=16912,
-    password="zCOaF5iQ1GSnd2z3GbeIAA9iZFPegqIh",
-    max_connections=8000,
+    host="redis-19266.c252.ap-southeast-1-1.ec2.redns.redis-cloud.com",
+    port=19266,
+    password="YJ76HbEgRPtNjZjHrsbNrIJTygUIQMW0",
+    max_connections=10000,
     timeout=20,
     decode_responses=False,
     retry_on_timeout=True,
@@ -114,6 +114,13 @@ async def get_crimes(skip: int = Query(0, ge=0), limit: int = Query(1000, gt=0))
     except Exception as e:
         print(f"Error processing request: {str(e)}")
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
+
+
+# @router.get("/chicago-crimes/stream")
+# async def stream_crimes(skip: int = Query(0, ge=0), limit: int = Query(1000, gt=0)):
+#     return StreamingResponse(
+#         stream_crimes_generator(skip, limit), media_type="application/json"
+#     )
 
 
 @router.get("/health")
