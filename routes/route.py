@@ -4,6 +4,7 @@ from models.chicago_crimes import Chicago_Crime
 from config.database import collection_name
 from schema.schemas import list_serial
 from bson import ObjectId, json_util
+from typing import AsyncGenerator
 import json
 import redis
 from typing import Optional
@@ -38,6 +39,61 @@ CACHE_EXPIRATION = timedelta(minutes=30)
 
 # Semaphore to limit concurrent database operations
 DB_SEMAPHORE = asyncio.Semaphore(100)
+
+
+async def stream_crimes_generator(
+    skip: int = 0, limit: int = 1000
+) -> AsyncGenerator[str, None]:
+    """
+    Asynchronous generator for streaming crime records
+    """
+    try:
+        # Get cursor for the query
+        cursor = collection_name.find({}).skip(skip).limit(limit)
+
+        # Stream opening bracket
+        yield "["
+
+        first = True
+        count = 0
+
+        async for crime in async_cursor_iterator(cursor):
+            if not first:
+                yield ","
+            else:
+                first = False
+
+            # Convert the document to JSON and yield
+            yield json.dumps(crime, default=json_util.default)
+
+            count += 1
+            if limit and count >= limit:
+                break
+
+        # Stream closing bracket
+        yield "]"
+
+    except Exception as e:
+        print(f"Streaming error: {str(e)}")
+        yield json.dumps({"error": "Streaming error occurred"})
+
+
+async def async_cursor_iterator(cursor):
+    """
+    Convert MongoDB cursor to async iterator
+    """
+    while True:
+        try:
+            # Get next document in thread pool
+            doc = await run_in_threadpool(next, cursor, None)
+            if doc is None:
+                break
+            yield doc
+        except StopIteration:
+            break
+        except Exception as e:
+            print(f"Cursor iteration error: {str(e)}")
+            break
 
 
 def get_cache_key(skip: int, limit: int) -> str:
@@ -116,6 +172,102 @@ async def get_crimes(skip: int = Query(0, ge=0), limit: int = Query(1000, gt=0))
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
 
+@router.get("/chicago-crimes/stream")
+async def stream_crimes(skip: int = Query(0, ge=0), limit: int = Query(1000, gt=0)):
+    """
+    Stream chicago crimes data with pagination
+    """
+    try:
+        return StreamingResponse(
+            stream_crimes_generator(skip, limit),
+            media_type="application/json",
+            headers={
+                "X-Stream": "True",
+                "X-Pagination-Skip": str(skip),
+                "X-Pagination-Limit": str(limit),
+            },
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Streaming error: {str(e)}")
+
+
+# Optional: Add batch size parameter for more control
+@router.get("/chicago-crimes/stream/batch")
+async def stream_crimes_batch(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(1000, gt=0),
+    batch_size: int = Query(100, ge=1, le=1000),
+):
+    """
+    Stream chicago crimes data with custom batch size
+    """
+
+    async def batch_generator() -> AsyncGenerator[str, None]:
+        try:
+            cursor = collection_name.find({}).skip(skip).limit(limit)
+
+            yield "["
+            first_batch = True
+
+            while True:
+                batch = []
+                batch_count = 0
+
+                while batch_count < batch_size:
+                    try:
+                        doc = await run_in_threadpool(next, cursor, None)
+                        if doc is None:
+                            break
+                        batch.append(doc)
+                        batch_count += 1
+                    except StopIteration:
+                        break
+
+                if not batch:
+                    break
+
+                if not first_batch:
+                    yield ","
+                else:
+                    first_batch = False
+
+                yield json.dumps(batch, default=json_util.default)[
+                    1:-1
+                ]  # Remove batch brackets
+
+            yield "]"
+
+        except Exception as e:
+            print(f"Batch streaming error: {str(e)}")
+            yield json.dumps({"error": "Batch streaming error occurred"})
+
+    return StreamingResponse(
+        batch_generator(),
+        media_type="application/json",
+        headers={"X-Stream": "True", "X-Batch-Size": str(batch_size)},
+    )
+
+
+# Health check endpoint for streaming
+@router.get("/stream/health")
+async def check_stream_health():
+    """
+    Check streaming functionality health
+    """
+    try:
+        # Test with small sample
+        cursor = collection_name.find({}).limit(1)
+        doc = await run_in_threadpool(next, cursor, None)
+
+        return {
+            "status": "healthy",
+            "streaming": "available",
+            "sample_available": bool(doc),
+        }
+    except Exception as e:
+        return {"status": "unhealthy", "error": str(e)}
+
+
 # @router.get("/chicago-crimes/stream")
 # async def stream_crimes(skip: int = Query(0, ge=0), limit: int = Query(1000, gt=0)):
 #     return StreamingResponse(
@@ -173,3 +325,14 @@ async def get_cache_stats():
         raise HTTPException(
             status_code=500, detail=f"Failed to get cache stats: {str(e)}"
         )
+
+
+# Add cache cleanup endpoint
+@router.post("/cache/cleanup")
+async def cleanup_cache():
+    """Remove old cache entries"""
+    try:
+        redis_client.flushdb()
+        return {"message": "Cache cleared successfully"}
+    except redis.RedisError as e:
+        raise HTTPException(status_code=500, detail=str(e))
